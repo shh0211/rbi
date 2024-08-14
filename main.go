@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 const (
@@ -93,7 +94,7 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 		"8080/tcp": {{HostIP: "0.0.0.0", HostPort: "8080"}},
 	}
 
-	for i := 57000; i <= 57100; i++ {
+	for i := 56000; i <= 56100; i++ {
 		port := fmt.Sprintf("%d/udp", i)
 		portBindings[nat.Port(port)] = []nat.PortBinding{
 			{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", i)},
@@ -126,6 +127,7 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 		AttachStderr: true,
 	}
 
+	time.Sleep(2 * time.Second)
 	execIDResp, err := cli.ContainerExecCreate(ctx, resp.ID, execConfig)
 	if err != nil {
 		http.Error(w, "Failed to create exec instance", http.StatusInternalServerError)
@@ -186,14 +188,12 @@ func dynamicProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	containerID := parts[1]
-	pathToProxy := "/" + strings.Join(parts[2:], "/")
 	port, err := getContainerPort(containerID)
 	if err != nil {
 		http.Error(w, "Failed to get container port", http.StatusInternalServerError)
 		return
 	}
-	target := "http://127.0.0.1:" + port + pathToProxy
-	fmt.Println(target)
+	target := "http://127.0.0.1:" + port
 	targetURL, err := url.Parse(target)
 	if err != nil {
 		http.Error(w, "Failed to parse target URL", http.StatusInternalServerError)
@@ -202,57 +202,27 @@ func dynamicProxy(w http.ResponseWriter, r *http.Request) {
 
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 	proxy.Director = func(req *http.Request) {
+		pathToProxy := "/" + strings.Join(parts[2:], "/")
+
+		fmt.Println(target)
 		req.Header = r.Header
 		req.URL.Scheme = targetURL.Scheme
 		req.URL.Host = targetURL.Host
-		req.URL.Path = pathToProxy
+		if r.URL.Path == "/js/chunk-vendors.025e045d.js" || r.URL.Path == "/js/app.12b7d986.js" || r.URL.Path == "/css/app.d6413b51.css" {
+
+		} else {
+			req.URL.Path = pathToProxy
+		}
+
 		req.Host = targetURL.Host
 	}
 	if IsWebsocketRequest(r) {
-		handleWebSocket(w, r, targetURL)
+		revproxy := httputil.ReverseProxy{
+			Director: proxy.Director,
+		}
+		revproxy.ServeHTTP(w, r)
 	} else {
 		proxy.ServeHTTP(w, r)
-	}
-}
-func handleWebSocket(w http.ResponseWriter, r *http.Request, targetURL *url.URL) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		http.Error(w, "Failed to upgrade connection", http.StatusInternalServerError)
-		return
-	}
-	defer conn.Close()
-
-	// Connect to the target WebSocket server
-	targetConn, _, err := websocket.DefaultDialer.Dial(targetURL.String(), nil)
-	if err != nil {
-		http.Error(w, "Failed to connect to target WebSocket server", http.StatusInternalServerError)
-		return
-	}
-	defer targetConn.Close()
-
-	// Handle WebSocket traffic between client and server
-	go func() {
-		for {
-			messageType, msg, err := conn.ReadMessage()
-			if err != nil {
-				break
-			}
-			err = targetConn.WriteMessage(messageType, msg)
-			if err != nil {
-				break
-			}
-		}
-	}()
-
-	for {
-		messageType, msg, err := targetConn.ReadMessage()
-		if err != nil {
-			break
-		}
-		err = conn.WriteMessage(messageType, msg)
-		if err != nil {
-			break
-		}
 	}
 }
 
