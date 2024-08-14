@@ -87,7 +87,7 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 		"NEKO_SCREEN=1920x1080@60",
 		"NEKO_PASSWORD=rib",
 		"NEKO_PASSWORD_ADMIN=rbi",
-		"NEKO_EPR=56000-56100",
+		"NEKO_EPR=52-56100",
 		"NEKO_NAT1TO1=202.63.172.204",
 	}
 	portBindings := map[nat.Port][]nat.PortBinding{
@@ -208,9 +208,7 @@ func dynamicProxy(w http.ResponseWriter, r *http.Request) {
 		req.Header = r.Header
 		req.URL.Scheme = targetURL.Scheme
 		req.URL.Host = targetURL.Host
-		if r.URL.Path == "/js/chunk-vendors.025e045d.js" || r.URL.Path == "/js/app.12b7d986.js" || r.URL.Path == "/css/app.d6413b51.css" {
-
-		} else {
+		if len(containerID) == len("0f27e486215643f62403a9f7d97a620b12f24667a93131db3838aff6f520c0de") {
 			req.URL.Path = pathToProxy
 		}
 
