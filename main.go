@@ -2,15 +2,19 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+	"github.com/gorilla/mux"
+	_ "github.com/mattn/go-sqlite3"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 )
 
@@ -133,15 +137,20 @@ func stopContainer(w http.ResponseWriter, r *http.Request) {
 }
 
 func dynamicProxy(w http.ResponseWriter, r *http.Request) {
-	// 假设路径格式为 /proxy/{container_id}/{path_to_proxy}
-	parts := strings.SplitN(r.URL.Path, "/", 3)
-	if len(parts) < 3 {
+	// 假设路径格式为 /{container_id}/{path_to_proxy}
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) < 2 {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 	containerID := parts[1]
-	pathToProxy := "/" + parts[2]
-	target := "http://127.0.0.1:" + getContainerPort(containerID) + pathToProxy
+	pathToProxy := "/" + strings.Join(parts[2:], "/")
+	port, err := getContainerPort(containerID)
+	if err != nil {
+		http.Error(w, "Failed to get container port", http.StatusInternalServerError)
+		return
+	}
+	target := "http://127.0.0.1:" + port + pathToProxy
 
 	targetURL, err := url.Parse(target)
 	if err != nil {
@@ -154,13 +163,41 @@ func dynamicProxy(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 }
 
-func getContainerPort(containerID string) string {
-	return "8080"
+func getContainerPort(containerID string) (string, error) {
+	return "8080", nil
+}
+
+func initDB() (*sql.DB, error) {
+	dbPath := "./containers.db"
+	createTable := false
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		createTable = true
+	}
+
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if createTable {
+		createTableSQL := `CREATE TABLE IF NOT EXISTS port_mappings (
+            container_id TEXT PRIMARY KEY,
+            host_port TEXT NOT NULL
+        );`
+		_, err = db.Exec(createTableSQL)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return db, nil
 }
 
 func main() {
-	http.HandleFunc("/proxy/", dynamicProxy)
-	http.HandleFunc("/start", startContainer)
-	http.HandleFunc("/stop", stopContainer)
-	http.ListenAndServe(":18080", nil)
+	router := mux.NewRouter()
+	router.HandleFunc("/start", startContainer).Methods("POST")
+	router.HandleFunc("/stop", stopContainer).Methods("POST")
+	// 动态代理的路由
+	router.PathPrefix("/").HandlerFunc(dynamicProxy)
+	http.ListenAndServe(":18083", router)
 }
