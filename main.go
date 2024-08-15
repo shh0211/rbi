@@ -226,13 +226,29 @@ func stopContainer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tx := Db.Begin()
+	if tx.Error != nil {
+		http.Error(w, "Failed to start transaction", http.StatusInternalServerError)
+		return
+
+	}
 	ctx := context.Background()
 
 	if err := cli.ContainerStop(ctx, req.ContainerID, container.StopOptions{}); err != nil {
+		tx.Rollback()
 		http.Error(w, "Failed to stop Docker container", http.StatusInternalServerError)
 		return
 	}
-
+	// 删除数据库中对应的记录
+	if err := tx.Where("container_id = ?", req.ContainerID).Delete(&ContainerInfo{}).Error; err != nil {
+		tx.Rollback() // 如果删除记录失败，则回滚事务
+		http.Error(w, "Failed to delete container record", http.StatusInternalServerError)
+		return
+	}
+	if err := tx.Commit().Error; err != nil {
+		http.Error(w, "Database transaction commit failed", http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Container stopped and removed successfully"))
 }
@@ -301,10 +317,6 @@ func getContainerIP(containerID string) (string, error) {
 		return "", err
 	}
 	return dbRes.ContainerId, nil
-}
-func getContainerPort(containerID string) (string, error) {
-	// Replace with actual logic to retrieve the container port from the database
-	return "8080", nil
 }
 
 type ContainerInfo struct {
