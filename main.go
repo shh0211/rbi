@@ -21,6 +21,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -125,6 +127,11 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Println("Error getting current working directory:", err)
+		return
+	}
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image: "wps",
 		Env:   env,
@@ -136,7 +143,7 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 		Mounts: []mount.Mount{
 			{
 				Type:   "bind",
-				Source: "./dist",
+				Source: filepath.Join(cwd, "dist"),
 				Target: "/var/www",
 			},
 		},
@@ -342,6 +349,7 @@ var Db *gorm.DB
 func main() {
 	db, err := initDB()
 	if err != nil {
+		fmt.Println("err")
 		panic(err.Error())
 	}
 	Db = db
