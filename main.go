@@ -92,6 +92,7 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 	startPort, endPort, err := generateRandomPortRange(minPort, maxPort, rangeSize)
 	if err != nil {
 		// if range fail re open it
+		fmt.Println("port err:", err.Error())
 		http.Redirect(w, r, r.URL.String(), http.StatusFound)
 		return
 	}
@@ -399,10 +400,25 @@ func generateRandomPortRange(minPort, maxPort, rangeSize int) (int, int, error) 
 
 // 检查端口是否可用
 func isPortAvailable(network string, port int) bool {
-	listener, err := net.Listen(network, fmt.Sprintf(":%d", port))
-	if err != nil {
-		return false
+	// 根据网络类型选择合适的函数
+	if network == "udp" || network == "udp4" || network == "udp6" {
+		// UDP端口监听
+		addr := fmt.Sprintf(":%d", port)
+		conn, err := net.ListenPacket(network, addr)
+		if err != nil {
+			fmt.Println("Listen UDP Port err:", err.Error())
+			return false
+		}
+		defer conn.Close()
+	} else {
+		// TCP端口监听
+		listener, err := net.Listen(network, fmt.Sprintf(":%d", port))
+		if err != nil {
+			fmt.Println("Listen TCP Port err:", err.Error())
+			return false
+		}
+		defer listener.Close()
 	}
-	defer listener.Close()
+
 	return true
 }
