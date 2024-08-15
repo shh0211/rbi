@@ -2,22 +2,25 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	_ "github.com/mattn/go-sqlite3"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"log"
+	"math/rand"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -28,6 +31,10 @@ const (
 	UserId     = "uid"
 	Connection = "Connection"
 	Upgrade    = "Upgrade"
+	// 定义端口范围
+	minPort   = 10000
+	maxPort   = 65535
+	rangeSize = 10
 )
 
 type StartRequest struct {
@@ -82,19 +89,35 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := context.Background()
-
+	startPort, endPort, err := generateRandomPortRange(minPort, maxPort, rangeSize)
+	if err != nil {
+		// if range fail re open it
+		http.Redirect(w, r, r.URL.String(), http.StatusFound)
+		return
+	}
+	ok, err := checkPortRangeConflict(Db, startPort, rangeSize)
+	if err != nil {
+		// if range fail re open it
+		fmt.Println("Check port fail:", err.Error())
+		http.Redirect(w, r, r.URL.String(), http.StatusFound)
+		return
+	}
+	if !ok {
+		fmt.Println("Port conflict,So redirect")
+		http.Redirect(w, r, r.URL.String(), http.StatusFound)
+		return
+	}
 	env := []string{
 		"NEKO_SCREEN=1920x1080@60",
-		"NEKO_PASSWORD=rib",
+		"NEKO_PASSWORD=ribZXCxcZXcXZCxzZ",
 		"NEKO_PASSWORD_ADMIN=rbi",
-		"NEKO_EPR=52-56100",
+		fmt.Sprintf("NEKO_EPR=%d-%d", startPort, endPort),
 		"NEKO_NAT1TO1=202.63.172.204",
 	}
-	portBindings := map[nat.Port][]nat.PortBinding{
-		"8080/tcp": {{HostIP: "0.0.0.0", HostPort: "8080"}},
-	}
 
-	for i := 56000; i <= 56100; i++ {
+	portBindings := map[nat.Port][]nat.PortBinding{}
+
+	for i := startPort; i <= endPort; i++ {
 		port := fmt.Sprintf("%d/udp", i)
 		portBindings[nat.Port(port)] = []nat.PortBinding{
 			{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", i)},
@@ -109,6 +132,13 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 		PortBindings: portBindings,
 		CapAdd:       strslice.StrSlice{"SYS_ADMIN"},
 		AutoRemove:   true,
+		Mounts: []mount.Mount{
+			{
+				Type:   "bind",
+				Source: "./dist",
+				Target: "/var/www",
+			},
+		},
 	}, nil, nil, "neko_user_"+req.UserId)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create Docker container: %s", err.Error()), http.StatusInternalServerError)
@@ -116,10 +146,36 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		http.Error(w, "Failed to start Docker container", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to start Docker container %s", err.Error()), http.StatusInternalServerError)
+		return
+	}
+	// 获取容器详细信息
+	containerJSON, err := cli.ContainerInspect(ctx, resp.ID)
+	if err != nil {
+		fmt.Println("Failed to inspect container:", err)
 		return
 	}
 
+	// 获取容器的IP地址
+	containerIP := containerJSON.NetworkSettings.IPAddress
+	if containerIP == "" {
+		fmt.Println("Container IP address not found")
+	} else {
+		fmt.Printf("Container IP address: %s\n", containerIP)
+	}
+	if containerIP == "" {
+		fmt.Println("Container IP is not found")
+		return
+	}
+	containerInfo := &ContainerInfo{
+		ContainerId: resp.ID,
+		MinPort:     startPort,
+		IP:          containerIP,
+	}
+	err = Db.Save(containerInfo).Error
+	if err != nil {
+		fmt.Println("Save ContainerInfo err:", err)
+	}
 	cmd := fmt.Sprintf("url=%s && filename=$(basename $url) && wget -O \"$filename\" $url && wps \"$filename\"", req.FileUrl)
 	execConfig := container.ExecOptions{
 		Cmd:          strslice.StrSlice{"bash", "-c", cmd},
@@ -188,12 +244,17 @@ func dynamicProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	containerID := parts[1]
-	port, err := getContainerPort(containerID)
+	ip, err := getContainerIP(containerID)
 	if err != nil {
 		http.Error(w, "Failed to get container port", http.StatusInternalServerError)
 		return
 	}
-	target := "http://127.0.0.1:" + port
+
+	if ip == "" {
+		http.Error(w, "Get Container IP from Db is null", http.StatusInternalServerError)
+		return
+	}
+	target := fmt.Sprintf("http://%s:8080", ip)
 	targetURL, err := url.Parse(target)
 	if err != nil {
 		http.Error(w, "Failed to parse target URL", http.StatusInternalServerError)
@@ -224,41 +285,65 @@ func dynamicProxy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getContainerIP(containerID string) (string, error) {
+	// Replace with actual logic to retrieve the container port from the database
+	dbRes := &ContainerInfo{}
+	err := Db.Find(dbRes, &ContainerInfo{ContainerId: containerID}).Error
+	if err != nil {
+		return "", err
+	}
+	return dbRes.ContainerId, nil
+}
 func getContainerPort(containerID string) (string, error) {
 	// Replace with actual logic to retrieve the container port from the database
 	return "8080", nil
 }
-func getContainerIP(containerID string) (string, error) {
-	// Replace with actual logic to retrieve the container port from the database
-	return "8080", nil
+
+type ContainerInfo struct {
+	ID          int64 `gorm:"primaryKey"`
+	ContainerId string
+	IP          string
+	Port        string
+	MinPort     int
 }
 
-func initDB() (*sql.DB, error) {
-	dbPath := "./containers.db"
-	createTable := false
-	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		createTable = true
-	}
+// 检查新生成的端口范围是否与数据库中的记录冲突
+func checkPortRangeConflict(db *gorm.DB, newMinPort, rangeSize int) (bool, error) {
+	var conflicts int64
+	newMaxPort := newMinPort + rangeSize - 1
 
-	db, err := sql.Open("sqlite3", dbPath)
+	err := db.Model(&ContainerInfo{}).Where("? BETWEEN MinPort AND MinPort + ? - 1 OR ? BETWEEN MinPort AND MinPort + ? - 1",
+		newMinPort, rangeSize, newMaxPort, rangeSize).Count(&conflicts).Error
+
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 
-	if createTable {
-		createTableSQL := `CREATE TABLE IF NOT EXISTS port_mappings (
-            container_id TEXT PRIMARY KEY,
-            host_port TEXT NOT NULL
-        );`
-		if _, err = db.Exec(createTableSQL); err != nil {
-			return nil, err
-		}
-	}
-
-	return db, nil
+	return conflicts == 0, nil
 }
+
+func initDB() (*gorm.DB, error) {
+	// 初始化 SQLite 数据库连接
+	db, err := gorm.Open(sqlite.Open("rbi.db"), &gorm.Config{})
+	if err != nil {
+		log.Fatal("failed to connect database")
+	}
+
+	// 自动迁移模式，创建表
+	db.AutoMigrate(&ContainerInfo{})
+
+	// 创建一个新的用户
+	return db, err
+}
+
+var Db *gorm.DB
 
 func main() {
+	db, err := initDB()
+	if err != nil {
+		panic(err.Error())
+	}
+	Db = db
 	router := mux.NewRouter()
 	router.HandleFunc("/start", startContainer).Methods(http.MethodGet)
 	router.HandleFunc("/stop", stopContainer).Methods(http.MethodPost)
@@ -281,4 +366,43 @@ func IsWebsocketRequest(req *http.Request) bool {
 		return false
 	}
 	return containsHeader(Connection, "upgrade") && containsHeader(Upgrade, "websocket")
+}
+
+func findAvailablePort() (int, error) {
+	// 使用 net.Listen 绑定到端口 0，操作系统会自动选择一个可用的端口
+	listener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		return 0, err
+	}
+	defer listener.Close()
+
+	// 获取监听地址中的端口号
+	addr := listener.Addr().(*net.TCPAddr)
+	return addr.Port, nil
+}
+
+// 生成随机端口范围
+func generateRandomPortRange(minPort, maxPort, rangeSize int) (int, int, error) {
+	rand.Seed(time.Now().UnixNano())
+	startPort := rand.Intn(maxPort-minPort-rangeSize+1) + minPort
+	endPort := startPort + rangeSize - 1
+
+	// 检查端口范围是否可用
+	for port := startPort; port <= endPort; port++ {
+		if !isPortAvailable("udp", port) {
+			return 0, 0, fmt.Errorf("port %d is not available", port)
+		}
+	}
+
+	return startPort, endPort, nil
+}
+
+// 检查端口是否可用
+func isPortAvailable(network string, port int) bool {
+	listener, err := net.Listen(network, fmt.Sprintf(":%d", port))
+	if err != nil {
+		return false
+	}
+	defer listener.Close()
+	return true
 }
