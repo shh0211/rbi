@@ -305,7 +305,7 @@ type ContainerInfo struct {
 	ContainerId string
 	IP          string
 	Port        string
-	MinPort     int
+	MinPort     int `gorm:"min_port"`
 }
 
 // 检查新生成的端口范围是否与数据库中的记录冲突
@@ -313,7 +313,7 @@ func checkPortRangeConflict(db *gorm.DB, newMinPort, rangeSize int) (bool, error
 	var conflicts int64
 	newMaxPort := newMinPort + rangeSize - 1
 
-	err := db.Model(&ContainerInfo{}).Where("? BETWEEN MinPort AND MinPort + ? - 1 OR ? BETWEEN MinPort AND MinPort + ? - 1",
+	err := db.Model(&ContainerInfo{}).Where("? BETWEEN min_port AND min_port + ? - 1 OR ? BETWEEN min_port AND min_port + ? - 1",
 		newMinPort, rangeSize, newMaxPort, rangeSize).Count(&conflicts).Error
 
 	if err != nil {
