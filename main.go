@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -21,8 +20,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -127,7 +124,7 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	cwd, err := os.Getwd()
+	//cwd, err := os.Getwd()
 	if err != nil {
 		fmt.Println("Error getting current working directory:", err)
 		return
@@ -140,13 +137,13 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 		PortBindings: portBindings,
 		CapAdd:       strslice.StrSlice{"SYS_ADMIN"},
 		AutoRemove:   true,
-		Mounts: []mount.Mount{
-			{
-				Type:   "bind",
-				Source: filepath.Join(cwd, "dist"),
-				Target: "/var/www",
-			},
-		},
+		//Mounts: []mount.Mount{
+		//	{
+		//		Type:   mount.TypeBind,
+		//		Source: "/opt/neko/dist",
+		//		Target: "/var/www",
+		//	},
+		//},
 	}, nil, nil, "neko_user_"+req.UserId)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create Docker container: %s", err.Error()), http.StatusInternalServerError)
@@ -205,7 +202,7 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println("Command executed inside container")
 	if resp.ID != "" {
-		url := fmt.Sprintf("/%s", resp.ID)
+		url := fmt.Sprintf("/%s/", resp.ID)
 		http.Redirect(w, r, url, http.StatusFound)
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -283,14 +280,7 @@ func dynamicProxy(w http.ResponseWriter, r *http.Request) {
 
 		req.Host = targetURL.Host
 	}
-	if IsWebsocketRequest(r) {
-		revproxy := httputil.ReverseProxy{
-			Director: proxy.Director,
-		}
-		revproxy.ServeHTTP(w, r)
-	} else {
-		proxy.ServeHTTP(w, r)
-	}
+	proxy.ServeHTTP(w, r)
 }
 
 func getContainerIP(containerID string) (string, error) {
@@ -300,7 +290,7 @@ func getContainerIP(containerID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return dbRes.ContainerId, nil
+	return dbRes.IP, nil
 }
 func getContainerPort(containerID string) (string, error) {
 	// Replace with actual logic to retrieve the container port from the database
