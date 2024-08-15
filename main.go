@@ -21,6 +21,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -35,6 +36,13 @@ const (
 	maxPort   = 65535
 	rangeSize = 10
 )
+
+var MapInfo Mapping
+
+type Mapping struct {
+	M map[string]string
+	sync.RWMutex
+}
 
 type StartRequest struct {
 	UserId  string `json:"userId"`
@@ -249,12 +257,20 @@ func dynamicProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	containerID := parts[1]
-	ip, err := getContainerIP(containerID)
-	if err != nil {
-		http.Error(w, "Failed to get container port", http.StatusInternalServerError)
-		return
+	var ip string
+	if v, ok := MapInfo.M[containerID]; ok {
+		ip = v
+	} else {
+		var err error
+		ip, err = getContainerIP(containerID)
+		if err != nil {
+			http.Error(w, "Failed to get container port", http.StatusInternalServerError)
+			return
+		}
+		MapInfo.RWMutex.Lock()
+		MapInfo.M[containerID] = ip
+		MapInfo.RWMutex.Unlock()
 	}
-
 	if ip == "" {
 		http.Error(w, "Get Container IP from Db is null", http.StatusInternalServerError)
 		return
@@ -337,6 +353,7 @@ func initDB() (*gorm.DB, error) {
 var Db *gorm.DB
 
 func main() {
+	MapInfo.M = make(map[string]string, 0)
 	db, err := initDB()
 	if err != nil {
 		fmt.Println("err")
