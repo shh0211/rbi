@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -34,7 +35,7 @@ const (
 	// 定义端口范围
 	minPort   = 10000
 	maxPort   = 65535
-	rangeSize = 10
+	rangeSize = 100
 )
 
 var MapInfo Mapping
@@ -117,16 +118,18 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 	}
 	env := []string{
 		"NEKO_SCREEN=1920x1080@60",
-		"NEKO_PASSWORD=ribZXCxcZXcXZCxzZ",
+		"NEKO_PASSWORD=rbi",
 		"NEKO_PASSWORD_ADMIN=rbi",
 		fmt.Sprintf("NEKO_EPR=%d-%d", startPort, endPort),
 		"NEKO_NAT1TO1=202.63.172.204",
 	}
 
-	portBindings := map[nat.Port][]nat.PortBinding{}
-
+	portBindings := make(nat.PortMap, 0)
+	exposedPorts := make(nat.PortSet, 0)
 	for i := startPort; i <= endPort; i++ {
 		port := fmt.Sprintf("%d/udp", i)
+		p, _ := nat.NewPort("udp", fmt.Sprintf("%d", i))
+		exposedPorts[p] = struct{}{} // 设置容器的暴露端口
 		portBindings[nat.Port(port)] = []nat.PortBinding{
 			{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", i)},
 		}
@@ -138,20 +141,21 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
-		Image: "wps",
-		Env:   env,
+		Image:        "wps",
+		ExposedPorts: exposedPorts,
+		Env:          env,
 	}, &container.HostConfig{
 		ShmSize:      2 * 1024 * 1024 * 1024,
 		PortBindings: portBindings,
 		CapAdd:       strslice.StrSlice{"SYS_ADMIN"},
 		AutoRemove:   true,
-		//Mounts: []mount.Mount{
-		//	{
-		//		Type:   mount.TypeBind,
-		//		Source: "/opt/neko/dist",
-		//		Target: "/var/www",
-		//	},
-		//},
+		Mounts: []mount.Mount{
+			{
+				Type:   mount.TypeBind,
+				Source: "/opt/neko/dist",
+				Target: "/var/www",
+			},
+		},
 	}, nil, nil, "neko_user_"+req.UserId)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create Docker container: %s", err.Error()), http.StatusInternalServerError)
