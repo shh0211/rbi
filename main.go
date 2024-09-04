@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	_ "github.com/mattn/go-sqlite3"
+	"gopkg.in/yaml.v3"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"log"
@@ -21,10 +22,16 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
 )
+
+type Config struct {
+	TTLMinutes           int `yaml:"ttlMinutes"`
+	CheckIntervalSeconds int `yaml:"checkIntervalSeconds"`
+}
 
 const (
 	FileURL    = "fileUrl"
@@ -188,6 +195,7 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 		ContainerId: resp.ID,
 		MinPort:     startPort,
 		IP:          containerIP,
+		ExpireAt:    time.Now().Add(time.Duration(ttl) * time.Minute),
 	}
 	err = Db.Save(containerInfo).Error
 	if err != nil {
@@ -269,6 +277,57 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+// 更新容器ttl
+func updateContainerTTL(containerID string) {
+	result := Db.Model(&ContainerInfo{}).Where("container_id = ?", containerID).Update("expire_at", time.Now().Add(time.Duration(ttl)*time.Minute))
+	if result.Error != nil {
+		log.Printf("Failed to update container TTL: %v", result.Error)
+		return
+	}
+
+	if result.RowsAffected == 0 {
+		log.Printf("Container %s not found", containerID)
+		return
+	}
+	log.Printf("Container %s TTL updated successfully", containerID)
+	return
+}
+
+// 检查并删除过期容器
+func checkAndDeleteExpiredContainers() {
+	var expiredContainers []ContainerInfo
+	// 从数据库中查询所有已经过期的容器
+	result := Db.Where("expire_at <= ?", time.Now()).Find(&expiredContainers)
+	if result.Error != nil {
+		log.Printf("Failed to fetch expired containers: %v", result.Error)
+		return
+	}
+
+	for _, container := range expiredContainers {
+		if err := deleteDockerContainer(container.ContainerId); err != nil {
+			log.Printf("Error handling container %s: %v", container.ContainerId, err)
+		} else {
+			// 从数据库中删除容器记录
+			Db.Delete(&container)
+		}
+	}
+}
+func deleteDockerContainer(containerID string) error {
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return err
+	}
+
+	// 停止容器
+	if err := cli.ContainerStop(ctx, containerID, container.StopOptions{}); err != nil {
+		log.Printf("Failed to stop container %s: %v", containerID, err)
+		return err
+	}
+
+	fmt.Printf("Container %s removed successfully\n", containerID)
+	return nil
+}
 func dynamicProxy(w http.ResponseWriter, r *http.Request) {
 	// 假设路径格式为 /{container_id}/{path_to_proxy}
 	parts := strings.Split(r.URL.Path, "/")
@@ -277,6 +336,9 @@ func dynamicProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	containerID := parts[1]
+	// 更新容器的ttl
+	updateContainerTTL(containerID)
+
 	var ip string
 	if v, ok := MapInfo.M[containerID]; ok {
 		ip = v
@@ -335,6 +397,7 @@ type ContainerInfo struct {
 	IP          string
 	Port        string
 	MinPort     int `gorm:"min_port"`
+	ExpireAt    time.Time
 }
 
 // 检查新生成的端口范围是否与数据库中的记录冲突
@@ -365,8 +428,27 @@ func initDB() (*gorm.DB, error) {
 	// 创建一个新的用户
 	return db, err
 }
+func ReadConfig(configPath string) (*Config, error) {
+	config := &Config{}
+
+	// Read the config file
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse the YAML content into Config struct
+	err = yaml.Unmarshal(data, config)
+	if err != nil {
+		return nil, err
+	}
+
+	return config, nil
+}
 
 var Db *gorm.DB
+var ttl int
+var checkInterval int
 
 func main() {
 	MapInfo.M = make(map[string]string, 0)
@@ -376,6 +458,23 @@ func main() {
 		panic(err.Error())
 	}
 	Db = db
+	config, err := ReadConfig("config.yml")
+	if err != nil {
+		log.Fatalf("Error loading config: %v", err)
+	}
+	ttl = config.TTLMinutes
+	checkInterval = config.CheckIntervalSeconds
+	//根据间隔时间定时检查ttl
+	ticker := time.NewTicker(time.Duration(checkInterval) * time.Second)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				fmt.Println("定时检查ttl")
+				checkAndDeleteExpiredContainers()
+			}
+		}
+	}()
 	router := mux.NewRouter()
 	router.HandleFunc("/start", startContainer).Methods(http.MethodGet)
 	router.HandleFunc("/stop", stopContainer).Methods(http.MethodPost)
