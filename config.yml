@@ -1,2 +1,6 @@
+#容器生存时间
 ttlMinutes: 10
+#检查ttl间隔时间
 checkIntervalSeconds: 300
+#ws更新时间
+wsUpdateIntervalSeconds: 60

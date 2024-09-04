@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"compress/flate"
+	"compress/gzip"
 	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/andybalholm/brotli"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/strslice"
@@ -16,6 +20,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"io"
 	"log"
 	"math/rand"
 	"net"
@@ -23,14 +28,16 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 )
 
 type Config struct {
-	TTLMinutes           int `yaml:"ttlMinutes"`
-	CheckIntervalSeconds int `yaml:"checkIntervalSeconds"`
+	TTLMinutes              int `yaml:"ttlMinutes"`
+	CheckIntervalSeconds    int `yaml:"checkIntervalSeconds"`
+	wsUpdateIntervalSeconds int `yaml:"wsUpdateIntervalSeconds"`
 }
 
 const (
@@ -143,10 +150,10 @@ func startContainer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Println("Error getting current working directory:", err)
-		return
-	}
+	//if err != nil {
+	//	fmt.Println("Error getting current working directory:", err)
+	//	return
+	//}
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image:        "wps",
 		ExposedPorts: exposedPorts,
@@ -336,8 +343,6 @@ func dynamicProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	containerID := parts[1]
-	// 更新容器的ttl
-	updateContainerTTL(containerID)
 
 	var ip string
 	if v, ok := MapInfo.M[containerID]; ok {
@@ -378,7 +383,86 @@ func dynamicProxy(w http.ResponseWriter, r *http.Request) {
 
 		req.Host = targetURL.Host
 	}
+	proxy.ModifyResponse = modifyResponse
 	proxy.ServeHTTP(w, r)
+}
+
+func modifyResponse(resp *http.Response) error {
+	if resp.Header.Get("Content-Type") == "text/html" {
+		//判断内容的content-encoding并解压
+		var reader io.Reader
+		switch resp.Header.Get("Content-Encoding") {
+		case "gzip":
+			gzipReader, err := gzip.NewReader(resp.Body)
+			if err != nil {
+				return err
+			}
+			defer gzipReader.Close()
+			reader = gzipReader
+		case "br":
+			brotliReader := brotli.NewReader(resp.Body)
+			defer resp.Body.Close() // 确保响应体在完成后关闭
+			reader = brotliReader
+		case "deflate":
+			reader = flate.NewReader(resp.Body)
+			defer resp.Body.Close()
+		default:
+			reader = resp.Body // 没有或不支持的编码类型，直接读取
+		}
+
+		// 读取解压后的body
+		decodedBody, err := io.ReadAll(reader)
+		if err != nil {
+			return err
+		}
+		err = resp.Body.Close()
+		if err != nil {
+			return err
+		}
+		injectedScript := fmt.Sprintf(`
+		<script>
+		var pathParts = window.location.pathname.split('/');
+		var containerID;
+		if (pathParts.length > 1) {
+			if (pathParts[1].length == "0f27e486215643f62403a9f7d97a620b12f24667a93131db3838aff6f520c0de".length){
+				containerID = pathParts[1]; 
+				var ws = new WebSocket("ws://" + window.location.host + "/ws");
+				ws.onopen = function() {
+					console.log("WebSocket connected");
+					setInterval(function() {
+						ws.send(JSON.stringify({ action: "updateTTL", containerID: containerID }));
+					}, "%n");
+				};
+				ws.onmessage = function(evt) {
+					console.log("Server response: " + evt.data);
+				};
+				ws.onerror = function(err) {
+				   console.error('WebSocket encountered error: ', err.message, 'Closing socket');
+				   ws.close();
+				};
+			}
+			else
+				console.error("Container ID not found in URL");
+		} else {
+			console.error("Container ID not found in URL");
+		}
+		</script>
+		`, wsUpdateInterval*1000)
+		if strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
+			decodedBody = injectScriptIntoHtml(decodedBody, injectedScript)
+		}
+		resp.Body = io.NopCloser(bytes.NewReader(decodedBody))
+		resp.Header.Del("Content-Encoding")
+		resp.Header.Del("Content-Length")
+	}
+	return nil
+}
+func injectScriptIntoHtml(bodyBytes []byte, INJECT_FILE string) []byte {
+	re := regexp.MustCompile(`(<html.*?[^>]*>)`)
+	bodyBytes = re.ReplaceAllFunc(bodyBytes, func(i []byte) []byte {
+		return []byte(string(i) + INJECT_FILE)
+	})
+	return bodyBytes
 }
 
 func getContainerIP(containerID string) (string, error) {
@@ -449,6 +533,7 @@ func ReadConfig(configPath string) (*Config, error) {
 var Db *gorm.DB
 var ttl int
 var checkInterval int
+var wsUpdateInterval int
 
 func main() {
 	MapInfo.M = make(map[string]string, 0)
@@ -464,6 +549,7 @@ func main() {
 	}
 	ttl = config.TTLMinutes
 	checkInterval = config.CheckIntervalSeconds
+	wsUpdateInterval = config.wsUpdateIntervalSeconds
 	//根据间隔时间定时检查ttl
 	ticker := time.NewTicker(time.Duration(checkInterval) * time.Second)
 	go func() {
@@ -478,6 +564,7 @@ func main() {
 	router := mux.NewRouter()
 	router.HandleFunc("/start", startContainer).Methods(http.MethodGet)
 	router.HandleFunc("/stop", stopContainer).Methods(http.MethodPost)
+	router.HandleFunc("/ws", serveWs)
 	router.PathPrefix("/").HandlerFunc(dynamicProxy)
 
 	fmt.Println("Starting server on port 18083")
@@ -486,30 +573,45 @@ func main() {
 	}
 }
 
-func IsWebsocketRequest(req *http.Request) bool {
-	containsHeader := func(name, value string) bool {
-		items := strings.Split(req.Header.Get(name), ",")
-		for _, item := range items {
-			if value == strings.ToLower(strings.TrimSpace(item)) {
-				return true
-			}
-		}
-		return false
-	}
-	return containsHeader(Connection, "upgrade") && containsHeader(Upgrade, "websocket")
-}
-
-func findAvailablePort() (int, error) {
-	// 使用 net.Listen 绑定到端口 0，操作系统会自动选择一个可用的端口
-	listener, err := net.Listen("tcp", ":0")
+// ws服务
+func serveWs(w http.ResponseWriter, r *http.Request) {
+	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		return 0, err
+		log.Println("Upgrade:", err)
+		return
 	}
-	defer listener.Close()
+	defer ws.Close()
 
-	// 获取监听地址中的端口号
-	addr := listener.Addr().(*net.TCPAddr)
-	return addr.Port, nil
+	for {
+		_, message, err := ws.ReadMessage()
+		if err != nil {
+			log.Println("Read:", err)
+			break
+		}
+		log.Printf("recv: %s", message)
+
+		// 解析消息
+		var msg struct {
+			Action      string `json:"action"`
+			ContainerID string `json:"containerID"`
+		}
+		err = json.Unmarshal(message, &msg)
+		if err != nil {
+			log.Println("Error parsing message:", err)
+			continue
+		}
+
+		if msg.Action == "updateTTL" {
+			log.Println("Updating TTL for container", msg.ContainerID)
+			// 更新容器的 TTL
+			updateContainerTTL(msg.ContainerID)
+		}
+
+		if err := ws.WriteMessage(websocket.TextMessage, []byte("TTL updated for "+msg.ContainerID)); err != nil {
+			log.Println("Write:", err)
+			break
+		}
+	}
 }
 
 // 生成随机端口范围
