@@ -388,7 +388,7 @@ func dynamicProxy(w http.ResponseWriter, r *http.Request) {
 }
 
 func modifyResponse(resp *http.Response) error {
-	if resp.Header.Get("Content-Type") == "text/html" {
+	if strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
 		//判断内容的content-encoding并解压
 		var reader io.Reader
 		switch resp.Header.Get("Content-Encoding") {
@@ -426,12 +426,12 @@ func modifyResponse(resp *http.Response) error {
 		if (pathParts.length > 1) {
 			if (pathParts[1].length == "0f27e486215643f62403a9f7d97a620b12f24667a93131db3838aff6f520c0de".length){
 				containerID = pathParts[1]; 
-				var ws = new WebSocket("ws://" + window.location.host + "/ws");
+				var ws = new WebSocket("ws://" + window.location.host + "/appws");
 				ws.onopen = function() {
 					console.log("WebSocket connected");
 					setInterval(function() {
 						ws.send(JSON.stringify({ action: "updateTTL", containerID: containerID }));
-					}, "%n");
+					}, 60000);
 				};
 				ws.onmessage = function(evt) {
 					console.log("Server response: " + evt.data);
@@ -447,7 +447,7 @@ func modifyResponse(resp *http.Response) error {
 			console.error("Container ID not found in URL");
 		}
 		</script>
-		`, wsUpdateInterval*1000)
+		`)
 		if strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
 			decodedBody = injectScriptIntoHtml(decodedBody, injectedScript)
 		}
@@ -564,7 +564,7 @@ func main() {
 	router := mux.NewRouter()
 	router.HandleFunc("/start", startContainer).Methods(http.MethodGet)
 	router.HandleFunc("/stop", stopContainer).Methods(http.MethodPost)
-	router.HandleFunc("/ws", serveWs)
+	router.HandleFunc("/appws", serveWs)
 	router.PathPrefix("/").HandlerFunc(dynamicProxy)
 
 	fmt.Println("Starting server on port 18083")
