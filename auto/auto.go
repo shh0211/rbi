@@ -12,7 +12,7 @@ import (
 func main() {
 	// 远程调试端点 URL （remote-server-ip:9333）
 	//shh的本地浏览器调试
-	remoteURL := "ws://localhost:9222"
+	remoteURL := "ws://202.63.172.204:9444"
 
 	// 创建上下文，连接到远程 Chrome 实例
 	ctx, cancel := chromedp.NewRemoteAllocator(context.Background(), remoteURL)
