@@ -20,7 +20,7 @@ const routes: Array<RouteRecordRaw> = [
       meta: {
         title: '配置管理',
       },
-      component: () => import('@/views/container/index.vue'),
+      component: () => import('@/views/configuration/index.vue'),
     }]
   },
 

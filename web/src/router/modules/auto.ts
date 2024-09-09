@@ -20,7 +20,7 @@ const routes: Array<RouteRecordRaw> = [
       meta: {
         title: '自动化',
       },
-      component: () => import('@/views/container/index.vue'),
+      component: () => import('@/views/auto/index.vue'),
     }]
   },
 

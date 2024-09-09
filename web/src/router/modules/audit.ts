@@ -20,7 +20,7 @@ const routes: Array<RouteRecordRaw> = [
       meta: {
         title: '审计服务',
       },
-      component: () => import('@/views/container/index.vue'),
+      component: () => import('@/views/audit/index.vue'),
     }]
   },
 

@@ -20,7 +20,7 @@ const routes: Array<RouteRecordRaw> = [
       meta: {
         title: '快速访问',
       },
-      component: () => import('@/views/container/index.vue'),
+      component: () => import('@/views/recently/index.vue'),
     }]
   },
 
