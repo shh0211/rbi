@@ -85,7 +85,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { reactive, ref } from 'vue';
+  import { onMounted, reactive, ref } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import { useUserStore } from '@/store/modules/user';
   import { useMessage } from 'naive-ui';
@@ -93,6 +93,8 @@
   import { PersonOutline, LockClosedOutline, LogoGithub, LogoFacebook } from '@vicons/ionicons5';
   import { PageEnum } from '@/enums/pageEnum';
   import { websiteConfig } from '@/config/website.config';
+  import { getIsInit } from '@/api/login/user';
+
   interface FormState {
     username: string;
     password: string;
@@ -121,7 +123,11 @@
 
   const router = useRouter();
   const route = useRoute();
-
+  onMounted(() => {
+    getIsInit().then((res) => {
+      isInit.value = res.data.hasUsers;
+    });
+  });
   const handleSubmit = (e) => {
     e.preventDefault();
     formRef.value.validate(async (errors) => {

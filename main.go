@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"rbi/config"
 	"rbi/containers"
+	"rbi/middleware"
 	"rbi/proxy"
 	"rbi/user"
 )
@@ -18,9 +19,12 @@ func main() {
 	containers.InitTTLCheck()
 	// 设置路由
 	router := mux.NewRouter()
+	// 使用 CORS 中间件
+	router.Use(middleware.CORS)
+	// 注册
 	containers.RegisterRoutes(router)
-	proxy.RegisterRoutes(router)
 	user.RegisterRoutes(router)
+	proxy.RegisterRoutes(router)
 	// 启动服务
 	fmt.Println("Starting server on port 18083")
 	if err := http.ListenAndServe(":18083", router); err != nil {
