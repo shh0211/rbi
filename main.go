@@ -8,12 +8,10 @@ import (
 	"rbi/config"
 	"rbi/containers"
 	"rbi/proxy"
-	"rbi/sqlite"
+	"rbi/user"
 )
 
 func main() {
-	// 初始化数据库
-	sqlite.InitDB()
 	// 读取配置文件
 	config.ReadConfig("config.yml")
 	// 初始化 TTL 检查
@@ -22,6 +20,7 @@ func main() {
 	router := mux.NewRouter()
 	containers.RegisterRoutes(router)
 	proxy.RegisterRoutes(router)
+	user.RegisterRoutes(router)
 	// 启动服务
 	fmt.Println("Starting server on port 18083")
 	if err := http.ListenAndServe(":18083", router); err != nil {

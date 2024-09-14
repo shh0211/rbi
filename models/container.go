@@ -7,7 +7,8 @@ type ContainerInfo struct {
 	ContainerId string
 	IP          string
 	Port        string
-	MinPort     int `gorm:"min_port"`
+	UserID      int64 `gorm:"foreignKey:UserID"`
+	MinPort     int   `gorm:"min_port"`
 	ExpireAt    time.Time
 }
 
