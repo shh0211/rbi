@@ -5,6 +5,7 @@ import (
 	"github.com/gorilla/mux"
 	_ "github.com/mattn/go-sqlite3"
 	"net/http"
+	"rbi/automation"
 	"rbi/config"
 	"rbi/containers"
 	"rbi/middleware"
@@ -24,6 +25,7 @@ func main() {
 	// 注册
 	containers.RegisterRoutes(router)
 	user.RegisterRoutes(router)
+	automation.RegisterRoutes(router)
 	proxy.RegisterRoutes(router)
 	// 启动服务
 	fmt.Println("Starting server on port 18083")

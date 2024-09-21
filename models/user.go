@@ -3,7 +3,7 @@ package models
 import "time"
 
 type User struct {
-	ID        uint   `gorm:"primaryKey;autoIncrement"` // 主键，自增
+	UserID    uint   `gorm:"primaryKey;autoIncrement"` // 主键，自增
 	Username  string `gorm:"unique"`                   // 用户名唯一
 	Password  string
 	IsAdmin   bool

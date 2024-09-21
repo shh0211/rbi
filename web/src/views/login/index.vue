@@ -146,10 +146,12 @@
           message.destroyAll();
           if (code == ResultEnum.SUCCESS) {
             const toPath = decodeURIComponent((route.query?.redirect || '/') as string);
+            console.log('topath:', toPath);
             message.success('登录成功，即将进入系统');
+            console.log('route.name:', route.name);
             if (route.name === LOGIN_NAME) {
-              router.replace('/');
-            } else router.replace(toPath);
+              router.replace('/recently/index');
+            } else router.replace('/');
           } else {
             message.info(msg || '登录失败');
           }
