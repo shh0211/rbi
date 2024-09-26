@@ -14,16 +14,17 @@ const routes: Array<RouteRecordRaw> = [
       sort: 4,
       is_root: true,
     },
-    children: [{
-      path: 'index',
-      name: `auto`,
-      meta: {
-        title: '自动化',
+    children: [
+      {
+        path: 'index',
+        name: `auto`,
+        meta: {
+          title: '自动化',
+        },
+        component: () => import('@/views/auto/index.vue'),
       },
-      component: () => import('@/views/auto/index.vue'),
-    }]
+    ],
   },
-
 ];
 
 export default routes;

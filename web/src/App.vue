@@ -10,7 +10,6 @@
       <RouterView />
     </AppProvider>
   </NConfigProvider>
-
   <transition v-if="isLock && $route.name !== 'login'" name="slide-up">
     <LockScreen />
   </transition>

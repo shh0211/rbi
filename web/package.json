@@ -34,6 +34,7 @@
     "axios": "^1.7.2",
     "blueimp-md5": "^2.19.0",
     "date-fns": "^2.30.0",
+    "drawflow": "^0.0.60",
     "echarts": "^5.5.1",
     "element-resize-detector": "^1.2.4",
     "lodash-es": "^4.17.21",
@@ -46,11 +47,13 @@
     "vfonts": "^0.0.3",
     "vue": "^3.4.31",
     "vue-router": "^4.4.0",
-    "vue-types": "^4.2.1"
+    "vue-types": "^4.2.1",
+    "vuex": "^4.1.0"
   },
   "devDependencies": {
     "@commitlint/cli": "^17.8.1",
     "@commitlint/config-conventional": "^17.8.1",
+    "@types/drawflow": "^0.0.12",
     "@types/lodash": "^4.17.6",
     "@types/node": "^18.19.39",
     "@typescript-eslint/eslint-plugin": "^5.62.0",

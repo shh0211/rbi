@@ -18,7 +18,7 @@ func RegisterRoutes(router *mux.Router) {
 	router.HandleFunc("/automation/getScripts", getScripts).Methods(http.MethodGet)
 	router.HandleFunc("/automation/delScript", delScript).Methods(http.MethodPost)
 	router.HandleFunc("/automation/updateAction", updateAction).Methods(http.MethodPost)
-	router.HandleFunc("automation/runScript", runScript).Methods(http.MethodPost)
+	router.HandleFunc("/automation/runScript", runScript).Methods(http.MethodPost)
 }
 
 var Db = sqlite.Db
@@ -58,7 +58,7 @@ func delScript(w http.ResponseWriter, r *http.Request) {
 	scriptIDStr := r.URL.Query().Get("id")
 	scriptID, err := strconv.Atoi(scriptIDStr)
 	if err != nil || scriptID <= 0 {
-		http.Error(w, "无效的脚本ID", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
