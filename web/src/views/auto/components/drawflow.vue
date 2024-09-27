@@ -40,9 +40,10 @@
 <script>
   import Drawflow from 'drawflow';
   import { onMounted, shallowRef, h, getCurrentInstance, render, readonly, ref } from 'vue';
-  import Node1 from './nodes/node1.vue';
-  import Node2 from './nodes/node2.vue';
-  import Node3 from './nodes/node3.vue';
+  import Click from './nodes/click.vue';
+  import Navigate from './nodes/navigate.vue';
+  import SendKeys from './nodes/sendKeys.vue';
+  import WaitVisible from './nodes/waitVisible.vue';
   import 'drawflow/dist/drawflow.min.css';
   import './style.css';
   export default {
@@ -50,25 +51,32 @@
     setup() {
       const listNodes = readonly([
         {
-          name: 'Get/Post',
-          color: '#49494970',
-          item: 'Node1',
-          input: 0,
+          name: 'Navigate',
+          color: '#ff9900',
+          item: 'Navigate',
+          input: 1,
           output: 1,
         },
         {
-          name: 'Script',
-          color: 'blue',
-          item: 'Node2',
+          name: 'Click',
+          color: '#ff9900',
+          item: 'Click',
           input: 1,
-          output: 2,
+          output: 1,
         },
         {
-          name: 'console.log',
+          name: 'SendKeys',
           color: '#ff9900',
-          item: 'Node3',
+          item: 'SendKeys',
           input: 1,
-          output: 0,
+          output: 1,
+        },
+        {
+          name: 'WaitVisible',
+          color: '#ff9900',
+          item: 'WaitVisible',
+          input: 1,
+          output: 1,
         },
       ]);
       const editor = shallowRef({});
@@ -164,11 +172,10 @@
         const id = document.getElementById('drawflow');
         editor.value = new Drawflow(id, Vue, internalInstance.appContext.app._context);
         editor.value.start();
-
-        editor.value.registerNode('Node1', Node1, {}, {});
-        editor.value.registerNode('Node2', Node2, {}, {});
-        editor.value.registerNode('Node3', Node3, {}, {});
-
+        editor.value.registerNode('Navigate', Navigate, {}, {});
+        editor.value.registerNode('Click', Click, {}, {});
+        editor.value.registerNode('SendKeys', SendKeys, {}, {});
+        editor.value.registerNode('WaitVisible', WaitVisible, {}, {});
         editor.value.import({
           drawflow: {
             Home: {
@@ -222,8 +229,8 @@
     cursor: move;
   }
   #drawflow {
-    width: 100%;
-    height: 100%;
+    width: 5000px;
+    height: 550px;
     text-align: initial;
     background: #2b2c30;
     background-size: 20px 20px;
