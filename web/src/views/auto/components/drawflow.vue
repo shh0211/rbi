@@ -1,11 +1,11 @@
 <template>
-  <el-container>
-    <el-header class="header">
-      <h3>Drawflow Example vue3</h3>
-      <el-button type="primary" @click="exportEditor">Export</el-button>
-    </el-header>
-    <el-container class="container">
-      <el-aside width="250px" class="column">
+  <n-layout>
+    <n-layout-header class="header">
+      <h3>script</h3>
+      <n-button type="primary" @click="exportEditor">Export</n-button>
+    </n-layout-header>
+    <n-layout has-sider class="container">
+      <n-layout-sider width="250px" class="column">
         <ul>
           <li
             v-for="n in listNodes"
@@ -18,22 +18,24 @@
             <div class="node" :style="`background: ${n.color}`">{{ n.name }}</div>
           </li>
         </ul>
-      </el-aside>
-      <el-main>
+      </n-layout-sider>
+      <n-layout>
         <div id="drawflow" @drop="drop($event)" @dragover="allowDrop($event)"></div>
-      </el-main>
-    </el-container>
-  </el-container>
-  <el-dialog v-model="dialogVisible" title="Export" width="50%">
-    <span>Data:</span>
-    <pre><code>{{dialogData}}</code></pre>
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="dialogVisible = false">Cancel</el-button>
-        <el-button type="primary" @click="dialogVisible = false">Confirm</el-button>
-      </span>
-    </template>
-  </el-dialog>
+      </n-layout>
+    </n-layout>
+  </n-layout>
+  <n-modal :show="dialogVisible" title="Export" style="width: 50%">
+    <n-card size="small">
+      <span>Data:</span>
+      <pre><code>{{dialogData}}</code></pre>
+      <template #footer>
+        <span class="dialog-footer">
+          <n-button @click="dialogVisible = false">Cancel</n-button>
+          <n-button type="primary" @click="dialogVisible = false">Confirm</n-button>
+        </span>
+      </template>
+    </n-card>
+  </n-modal>
 </template>
 <script>
   import Drawflow from 'drawflow';
@@ -41,7 +43,8 @@
   import Node1 from './nodes/node1.vue';
   import Node2 from './nodes/node2.vue';
   import Node3 from './nodes/node3.vue';
-
+  import 'drawflow/dist/drawflow.min.css';
+  import './style.css';
   export default {
     name: 'DrawflowDashboard',
     setup() {
@@ -77,6 +80,7 @@
 
       function exportEditor() {
         dialogData.value = editor.value.export();
+        console.log(dialogVisible.value);
         dialogVisible.value = true;
       }
 
@@ -168,32 +172,7 @@
         editor.value.import({
           drawflow: {
             Home: {
-              data: {
-                5: {
-                  id: 5,
-                  name: 'Node2',
-                  data: { script: '(req,res) => {\n console.log(req);\n}' },
-                  class: 'Node2',
-                  html: 'Node2',
-                  typenode: 'vue',
-                  inputs: { input_1: { connections: [{ node: '6', input: 'output_1' }] } },
-                  outputs: { output_1: { connections: [] }, output_2: { connections: [] } },
-                  pos_x: 1000,
-                  pos_y: 117,
-                },
-                6: {
-                  id: 6,
-                  name: 'Node1',
-                  data: { url: 'localhost/add', method: 'post' },
-                  class: 'Node1',
-                  html: 'Node1',
-                  typenode: 'vue',
-                  inputs: {},
-                  outputs: { output_1: { connections: [{ node: '5', output: 'input_1' }] } },
-                  pos_x: 137,
-                  pos_y: 89,
-                },
-              },
+              data: {},
             },
           },
         });
@@ -212,8 +191,6 @@
   };
 </script>
 <style scoped>
-  @import 'drawflow/dist/drawflow.min.css';
-  @import 'style.css';
   .header {
     display: flex;
     justify-content: space-between;

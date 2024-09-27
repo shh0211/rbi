@@ -1,22 +1,18 @@
 <template>
-    <div class="header">{{title}}</div>
+  <div class="header">{{ title }}</div>
 </template>
 <script>
-import { defineComponent } from 'vue'
+  import { defineComponent } from 'vue';
 
-export default defineComponent({
+  export default defineComponent({
     props: ['title'],
-})
+  });
 </script>
 
-
 <style scoped>
-div {
+  div {
     background: #494949;
-    margin-top: -15px;
-    margin-left: -15px;
-    margin-right: -15px;
     padding: 10px 15px;
-    margin-bottom: 15px;
-}
+    margin: -15px -15px 15px;
+  }
 </style>
