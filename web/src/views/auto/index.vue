@@ -5,7 +5,7 @@
   import { toRaw } from 'vue';
   import { addNewScript, getScripts, delScript } from '@/api/auto/automation';
   import { ArrowBack } from '@vicons/ionicons5';
-  import DrawflowDashboard from '@/views/auto/drawflow.vue';
+  import DrawflowDashboard from '@/views/auto/components/drawflow.vue';
   interface Automation {
     AutomationID: string;
     Name: string;
@@ -195,7 +195,7 @@
         </n-icon>
       </n-button>
     </n-page-header>
-<!--    <drawflow-dashboard />-->
+    <drawflow-dashboard />
   </div>
 </template>
 
