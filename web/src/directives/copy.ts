@@ -28,7 +28,6 @@ function handleClick(this: any) {
   input.select();
   document.execCommand('Copy');
   document.body.removeChild(input);
-  console.log('复制成功', this.copyData);
 }
 
 export default copy;

@@ -108,14 +108,12 @@
       }
 
       function updateMenu() {
-        console.log("menus的value", menus.value)
         if (!settingStore.menuSetting.mixMenu) {
           menus.value = generatorMenu(asyncRouteStore.getMenus);
         } else {
           //混合菜单
           const firstRouteName: string = (currentRoute.matched[0].name as string) || '';
           menus.value = generatorMenuMix(asyncRouteStore.getMenus, firstRouteName, props.location);
-          console.log("menus的value", menus.value)
           const activeMenu: string = currentRoute?.matched[0].meta?.activeMenu as string;
           headerMenuSelectKey.value = (activeMenu ? activeMenu : firstRouteName) || '';
         }

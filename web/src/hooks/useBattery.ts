@@ -35,7 +35,6 @@ export const useBattery = () => {
 
   // 计算电池充满剩余时间
   const calcChargingTime = computed(() => {
-    console.log(state.battery);
     const hour = state.battery.chargingTime / 3600;
     const minute = (state.battery.chargingTime / 60) % 60;
     return `${~~hour}小时${~~minute}分钟`;
