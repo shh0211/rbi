@@ -1,7 +1,7 @@
 <template>
   <div ref="el">
     <nodeHeader title="Navigate" />
-    <n-input v-model:value="target" placeholder="目标网址" size="small" />
+    <n-input v-model:value="target" @update:value="updateTargetInput" placeholder="目标网址" size="small" />
   </div>
 </template>
 
@@ -22,6 +22,11 @@
       const dataNode = ref({});
       df = getCurrentInstance().appContext.config.globalProperties.$df.value;
 
+      const updateTargetInput = (value) => {
+        dataNode.value.data.target = value;
+        df.updateNodeDataFromId(nodeId.value, dataNode.value);
+      };
+
       const updateSelect = (value) => {
         dataNode.value.data.method = value;
         df.updateNodeDataFromId(nodeId.value, dataNode.value);
@@ -41,6 +46,7 @@
         target,
         method,
         updateSelect,
+        updateTargetInput,
       };
     },
   });

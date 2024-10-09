@@ -72,6 +72,7 @@
   const name = ref('');
   const description = ref('');
   const isEdit = ref(false);
+  const editId = ref('');
   export default defineComponent({
     components: {
       DrawflowDashboard,
@@ -83,6 +84,7 @@
 
       function edit(row: Automation) {
         console.log('edit', row);
+        editId.value = row.AutomationID;
         isEdit.value = true;
       }
       onMounted(() => {
@@ -141,6 +143,7 @@
         name,
         description,
         isEdit,
+        editId,
         changeShow,
         columns: createColumns(edit, del),
         pagination: false as const,
@@ -195,7 +198,7 @@
         </n-icon>
       </n-button>
     </n-page-header>
-    <drawflow-dashboard />
+    <drawflow-dashboard :id="editId" />
   </div>
 </template>
 

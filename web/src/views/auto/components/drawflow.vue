@@ -2,7 +2,7 @@
   <n-layout>
     <n-layout-header class="header">
       <h3>script</h3>
-      <n-button type="primary" @click="exportEditor">Export</n-button>
+      <n-button type="primary" @click="saveEditor">Export</n-button>
     </n-layout-header>
     <n-layout has-sider class="container">
       <n-layout-sider width="250px" class="column">
@@ -46,8 +46,15 @@
   import WaitVisible from './nodes/waitVisible.vue';
   import 'drawflow/dist/drawflow.min.css';
   import './style.css';
+  import { updateScript } from '@/api/auto/automation';
   export default {
     name: 'DrawflowDashboard',
+    props: {
+      id: {
+        type: String,
+        required: true,
+      },
+    },
     setup() {
       const listNodes = readonly([
         {
@@ -59,21 +66,21 @@
         },
         {
           name: 'Click',
-          color: '#ff9900',
+          color: 'rgba(158,158,158,0.95)',
           item: 'Click',
           input: 1,
           output: 1,
         },
         {
           name: 'SendKeys',
-          color: '#ff9900',
+          color: '#00ff33',
           item: 'SendKeys',
           input: 1,
           output: 1,
         },
         {
           name: 'WaitVisible',
-          color: '#ff9900',
+          color: '#0095ff',
           item: 'WaitVisible',
           input: 1,
           output: 1,
@@ -86,12 +93,153 @@
       const internalInstance = getCurrentInstance();
       internalInstance.appContext.app._context.config.globalProperties.$df = editor;
 
-      function exportEditor() {
+      function saveEditor() {
         dialogData.value = editor.value.export();
-        console.log(dialogVisible.value);
+        console.log('数据', dialogData.value.drawflow.Home.data);
+        updateScript(dialogData.value.drawflow.Home.data);
         dialogVisible.value = true;
       }
+      // region
+      function determineSequenceFromConnections(data) {
+        // 首先创建一个字典来存储节点的入度
+        const inDegree = {};
+        const sequenceMap = {};
 
+        // 初始化所有节点的入度为 0
+        Object.keys(data).forEach((key) => {
+          inDegree[key] = 0;
+        });
+
+        // 计算每个节点的入度
+        Object.keys(data).forEach((key) => {
+          const node = data[key];
+          if (node.outputs) {
+            Object.keys(node.outputs).forEach((outputKey) => {
+              node.outputs[outputKey].connections.forEach((connection) => {
+                inDegree[connection.node]++; // 增加目标节点的入度
+              });
+            });
+          }
+        });
+
+        // 找到所有入度为 0 的节点作为起点
+        const queue = [];
+        Object.keys(inDegree).forEach((key) => {
+          if (inDegree[key] === 0) {
+            queue.push(key);
+          }
+        });
+
+        let sequence = 1;
+        // 进行拓扑排序来确定执行顺序
+        while (queue.length > 0) {
+          const currentNode = queue.shift();
+          sequenceMap[currentNode] = sequence++;
+
+          const node = data[currentNode];
+          if (node.outputs) {
+            Object.keys(node.outputs).forEach((outputKey) => {
+              node.outputs[outputKey].connections.forEach((connection) => {
+                const targetNode = connection.node;
+                inDegree[targetNode]--;
+                if (inDegree[targetNode] === 0) {
+                  queue.push(targetNode);
+                }
+              });
+            });
+          }
+        }
+
+        return sequenceMap;
+      }
+
+      function prepareUpdateActionsRequest(data, automationID) {
+        const sequenceMap = determineSequenceFromConnections(data);
+        const actions = [];
+
+        Object.keys(data).forEach((key) => {
+          const node = data[key];
+          const action = {
+            ActionID: node.id || 0, // 假设 actionID 可以从 `id` 获取
+            AutomationID: automationID, // 直接使用传入的 automationID
+            Sequence: sequenceMap[key] || 0, // 根据连接关系推断出来的执行顺序
+            ActionType: node.name || '', // 根据节点的 name 设置 ActionType
+            Selector: node.data?.method || '', // 假设 CSS 选择器保存在 data 中的 method 字段
+            Value: node.html || '', // 使用 html 字段作为 Value
+            URL: '', // 假设没有明确的 URL 字段，可以视情况进行调整
+          };
+
+          actions.push(action);
+        });
+
+        return {
+          automation_id: automationID,
+          actions: actions,
+        };
+      }
+
+      // 示例用法
+      const data = {
+        1: {
+          id: 1,
+          name: 'Navigate',
+          data: {},
+          class: 'Navigate',
+          html: 'Navigate',
+          typenode: 'vue',
+          inputs: {
+            input_1: {
+              connections: [],
+            },
+          },
+          outputs: {
+            output_1: {
+              connections: [
+                {
+                  node: '2',
+                  output: 'input_1',
+                },
+              ],
+            },
+          },
+          pos_x: 221,
+          pos_y: 175,
+        },
+        2: {
+          id: 2,
+          name: 'SendKeys',
+          data: {
+            method: 'ByQuery',
+          },
+          class: 'SendKeys',
+          html: 'SendKeys',
+          typenode: 'vue',
+          inputs: {
+            input_1: {
+              connections: [
+                {
+                  node: '1',
+                  input: 'output_1',
+                },
+              ],
+            },
+          },
+          outputs: {
+            output_1: {
+              connections: [],
+            },
+          },
+          pos_x: 731,
+          pos_y: 182,
+        },
+      };
+
+      const automationID = 123; // 替换为实际的 automationID
+      const updateActionsRequest = prepareUpdateActionsRequest(data, automationID);
+
+      console.log(updateActionsRequest);
+
+      // endregion
       const drag = (ev) => {
         if (ev.type === 'touchstart') {
           mobile_item_selec = ev.target.closest('.drag-drawflow').getAttribute('data-node');
@@ -186,7 +334,7 @@
       });
 
       return {
-        exportEditor,
+        saveEditor,
         listNodes,
         drag,
         drop,

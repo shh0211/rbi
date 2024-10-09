@@ -1,7 +1,12 @@
 <template>
   <div ref="el">
     <nodeHeader title="Click" />
-    <n-input v-model:value="selector" placeholder="目标元素选择器" size="small" />
+    <n-input
+      v-model:value="selector"
+      @update:value="updateSelectorInput"
+      placeholder="目标元素选择器"
+      size="small"
+    />
     <br /><br />
     <n-select
       v-model:value="method"
@@ -53,6 +58,10 @@
       ]);
 
       df = getCurrentInstance().appContext.config.globalProperties.$df.value;
+      const updateSelectorInput = (value) => {
+        dataNode.value.data.selector = value;
+        df.updateNodeDataFromId(nodeId.value, dataNode.value);
+      };
 
       const updateSelect = (value) => {
         dataNode.value.data.method = value;
@@ -74,6 +83,7 @@
         method,
         options,
         updateSelect,
+        updateSelectorInput,
       };
     },
   });

@@ -11,3 +11,7 @@ export function addNewScript(data: any) {
 export function delScript(ID: string) {
   return api.post(`/automation/delScript?id=${ID}`);
 }
+
+export function updateScript(data: any) {
+  return api.post('/automation/updateScript', data);
+}

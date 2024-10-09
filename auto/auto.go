@@ -13,7 +13,6 @@ func main() {
 	// 远程调试端点 URL （remote-server-ip:9333）
 	//shh的本地浏览器调试
 	remoteURL := "ws://202.63.172.204:9444"
-
 	// 创建上下文，连接到远程 Chrome 实例
 	ctx, cancel := chromedp.NewRemoteAllocator(context.Background(), remoteURL)
 	defer cancel()
@@ -24,7 +23,6 @@ func main() {
 	// 设置超时
 	ctx, cancel = context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-
 	// 设置登录界面的url
 	loginUrl := "http://git.avocado.wiki"
 	username := "sunhaohang@buaa.edu.cn"
