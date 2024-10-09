@@ -8,6 +8,7 @@ import (
 	"rbi/automation"
 	"rbi/config"
 	"rbi/containers"
+	"rbi/graph"
 	"rbi/middleware"
 	"rbi/proxy"
 	"rbi/user"
@@ -26,6 +27,7 @@ func main() {
 	containers.RegisterRoutes(router)
 	user.RegisterRoutes(router)
 	automation.RegisterRoutes(router)
+	graph.RegisterRoutes(router)
 	proxy.RegisterRoutes(router)
 	// 启动服务
 	fmt.Println("Starting server on port 18083")

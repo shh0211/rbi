@@ -73,6 +73,7 @@
   const description = ref('');
   const isEdit = ref(false);
   const editId = ref('');
+  const editor = ref(null as any);
   export default defineComponent({
     components: {
       DrawflowDashboard,
@@ -81,11 +82,14 @@
     setup() {
       const showModal = ref(false);
       const message = useMessage();
-
       function edit(row: Automation) {
         console.log('edit', row);
         editId.value = row.AutomationID;
         isEdit.value = true;
+        console.log('editor', editor.value);
+        if (editor.value) {
+          editor.value.getGraphStructure(row.AutomationID);
+        }
       }
       onMounted(() => {
         console.log('onMounted');
@@ -141,6 +145,7 @@
         showModal,
         refresh,
         name,
+        editor,
         description,
         isEdit,
         editId,
@@ -198,7 +203,7 @@
         </n-icon>
       </n-button>
     </n-page-header>
-    <drawflow-dashboard :id="editId" />
+    <drawflow-dashboard :id="editId" ref="editor" />
   </div>
 </template>
 

@@ -13,5 +13,5 @@ export function delScript(ID: string) {
 }
 
 export function updateScript(data: any) {
-  return api.post('/automation/updateScript', data);
+  return api.post('/automation/updateAction', data);
 }

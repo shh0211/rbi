@@ -32,7 +32,7 @@
       const nodeId = ref(0);
       let df = null;
       const selector = ref('');
-      const method = ref('get');
+      const method = ref('');
       const dataNode = ref({});
       const options = readonly([
         {

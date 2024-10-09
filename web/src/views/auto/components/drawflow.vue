@@ -46,7 +46,10 @@
   import WaitVisible from './nodes/waitVisible.vue';
   import 'drawflow/dist/drawflow.min.css';
   import './style.css';
+  import { useMessage } from 'naive-ui';
   import { updateScript } from '@/api/auto/automation';
+  import { updateGraph, getGraph } from '@/api/graph/graph';
+
   export default {
     name: 'DrawflowDashboard',
     props: {
@@ -55,7 +58,7 @@
         required: true,
       },
     },
-    setup() {
+    setup(props) {
       const listNodes = readonly([
         {
           name: 'Navigate',
@@ -89,19 +92,29 @@
       const editor = shallowRef({});
       const dialogVisible = ref(false);
       const dialogData = ref({});
+      const message = useMessage();
       const Vue = { version: 3, h, render };
       const internalInstance = getCurrentInstance();
       internalInstance.appContext.app._context.config.globalProperties.$df = editor;
-
+      // region
       function saveEditor() {
         dialogData.value = editor.value.export();
-        console.log('数据', dialogData.value.drawflow.Home.data);
-        updateScript(dialogData.value.drawflow.Home.data);
-        dialogVisible.value = true;
+        console.log(dialogData.value.drawflow.Home.data);
+        const updateActionsRequest = prepareUpdateActionsRequest(
+          dialogData.value.drawflow.Home.data,
+          props.id
+        );
+        updateGraph({ automation_id: props.id, data: dialogData.value });
+        updateScript(updateActionsRequest)
+          .then(() => {
+            message.success('保存成功');
+          })
+          .catch(() => {
+            message.error('保存失败');
+          });
       }
-      // region
       function determineSequenceFromConnections(data) {
-        // 首先创建一个字典来存储节点的入度
+        // 创建一个字典来存储节点的入度
         const inDegree = {};
         const sequenceMap = {};
 
@@ -160,7 +173,6 @@
         Object.keys(data).forEach((key) => {
           const node = data[key];
           const action = {
-            ActionID: node.id || 0, // 假设 actionID 可以从 `id` 获取
             AutomationID: automationID, // 直接使用传入的 automationID
             Sequence: sequenceMap[key] || 0, // 根据连接关系推断出来的执行顺序
             ActionType: node.name || '', // 根据节点的 name 设置 ActionType
@@ -177,67 +189,6 @@
           actions: actions,
         };
       }
-
-      // 示例用法
-      const data = {
-        1: {
-          id: 1,
-          name: 'Navigate',
-          data: {},
-          class: 'Navigate',
-          html: 'Navigate',
-          typenode: 'vue',
-          inputs: {
-            input_1: {
-              connections: [],
-            },
-          },
-          outputs: {
-            output_1: {
-              connections: [
-                {
-                  node: '2',
-                  output: 'input_1',
-                },
-              ],
-            },
-          },
-          pos_x: 221,
-          pos_y: 175,
-        },
-        2: {
-          id: 2,
-          name: 'SendKeys',
-          data: {
-            method: 'ByQuery',
-          },
-          class: 'SendKeys',
-          html: 'SendKeys',
-          typenode: 'vue',
-          inputs: {
-            input_1: {
-              connections: [
-                {
-                  node: '1',
-                  input: 'output_1',
-                },
-              ],
-            },
-          },
-          outputs: {
-            output_1: {
-              connections: [],
-            },
-          },
-          pos_x: 731,
-          pos_y: 182,
-        },
-      };
-
-      const automationID = 123; // 替换为实际的 automationID
-      const updateActionsRequest = prepareUpdateActionsRequest(data, automationID);
-
-      console.log(updateActionsRequest);
 
       // endregion
       const drag = (ev) => {
@@ -308,8 +259,14 @@
           'vue'
         );
       }
-
+      function getGraphStructure(id) {
+        getGraph(props.id).then((res) => {
+          console.log('getGraphStructure', res.data);
+          editor.value.import(res.data.data);
+        });
+      }
       onMounted(() => {
+        console.log('drawflow mounted');
         var elements = document.getElementsByClassName('drag-drawflow');
         for (var i = 0; i < elements.length; i++) {
           elements[i].addEventListener('touchend', drop, false);
@@ -332,7 +289,6 @@
           },
         });
       });
-
       return {
         saveEditor,
         listNodes,
@@ -341,6 +297,7 @@
         allowDrop,
         dialogVisible,
         dialogData,
+        getGraphStructure,
       };
     },
   };
